@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapa Interactivo - Provincias y Cantones</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <style>
+    #map {
+      height: 100vh;
+      width: 100%;
+      background-color: #b3d9ff; /* Celeste mar */
+    }
+
+    .leaflet-label {
+      font-weight: bold;
+      font-size: 14px;
+      color: black;
+      text-shadow: 1px 1px 2px white;
+    }
+
+    #back-button {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: #40E0D0;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 14px;
+      display: none;
+      z-index: 1000;
+    }
+
+    #back-button:hover {
+      background-color: #2aa9a2;
+    }
+  </style>
+</head>
+<body>
+  <button id="back-button">Regresar a la vista provincial</button>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    // Crear el mapa
+    const map = L.map("map", {
+      zoomControl: true,
+      attributionControl: false,
+    }).setView([10, -84], 7); // Centro aproximado de Costa Rica
+
+    let provinciasLayer; // Capa de provincias
+    let cantonesLayer; // Capa de cantones
+    let provinciaSeleccionadaLayer; // Capa para mostrar solo la provincia seleccionada
+    const backButton = document.getElementById("back-button");
+
+    // Información personalizada para cada cantón
+    const infoCantones = {
+      "San José": {
+        descripcion: "Población: 352.381, Presupuesto 2025: 90.000.835.033, Actividades productivas principales: Comercio, Atención de la salud humana, Servicios inmobiliarios, Desarrollo inmobiliario: De tipo industrial, comercial y de vivienda, Plan Regulador: Vigente desde 2023", 
+        imagen: "./Imagenes/DiegoMiranda.png", // Cambia a tu ruta local o URL pública
+      },
+    };
+
+    // Función para crear el contenido del popup con imagen e información
+    function crearPopup(canton) {
+      const info = infoCantones[canton] || { descripcion: "Información no disponible.", imagen: "" };
+      return `
+        <div style="text-align: center;">
+          <h3>${canton}</h3>
+          <img src="${info.imagen}" alt="${canton}" style="width: 100px; height: auto; margin: 10px 0;">
+          <p>${info.descripcion}</p>
+        </div>
+      `;
+    }
+
+    // Función para definir el estilo de las provincias
+    function styleProvincias(feature) {
+      return {
+        color: "white",
+        weight: 1.5,
+        fillColor: "#6cbf84", // Verde claro
+        fillOpacity: 0.8,
+      };
+    }
+
+    // Mostrar solo los cantones de una provincia
+    function onProvinciaClick(event) {
+      const provinciaSeleccionada = event.target.feature.properties.NAME_1;
+
+      // Ocultar la capa de todas las provincias
+      map.removeLayer(provinciasLayer);
+
+      // Mostrar solo la provincia seleccionada
+      provinciaSeleccionadaLayer = L.geoJSON(event.target.feature, {
+        style: styleProvincias,
+      }).addTo(map);
+
+      // Cargar los cantones de la provincia seleccionada
+      fetch("cantones.json")
+        .then((response) => response.json())
+        .then((data) => {
+          const cantonesFiltrados = data.features.filter(
+            (feature) => feature.properties.NAME_1 === provinciaSeleccionada
+          );
+
+          // Dibujar los cantones
+          cantonesLayer = L.geoJSON(cantonesFiltrados, {
+            style: {
+              color: "white",
+              weight: 1.5,
+              fillColor: "#6cbf84",
+              fillOpacity: 0.8,
+            },
+            onEachFeature: (feature, layer) => {
+              const canton = feature.properties.NAME_2;
+
+              // Vincular el popup con la función personalizada
+              layer.bindPopup(crearPopup(canton));
+
+              layer.bindTooltip(feature.properties.NAME_2, {
+                permanent: true,
+                direction: "center",
+                className: "leaflet-label",
+              });
+
+              layer.on("click", () => {
+                layer.openPopup(); // Muestra el popup al hacer clic
+              });
+            },
+          }).addTo(map);
+
+          // Ajustar el zoom para ver solo la provincia seleccionada
+          map.fitBounds(provinciaSeleccionadaLayer.getBounds());
+
+          // Mostrar el botón para regresar a la vista provincial
+          backButton.style.display = "block";
+        });
+    }
+
+    // Regresar a la vista provincial
+    backButton.addEventListener("click", () => {
+      // Eliminar la capa de cantones y la provincia seleccionada
+      if (cantonesLayer) map.removeLayer(cantonesLayer);
+      if (provinciaSeleccionadaLayer) map.removeLayer(provinciaSeleccionadaLayer);
+
+      // Restaurar la capa de todas las provincias
+      provinciasLayer.addTo(map);
+
+      // Ajustar el zoom para ver todas las provincias
+      map.fitBounds(provinciasLayer.getBounds());
+
+      // Ocultar el botón
+      backButton.style.display = "none";
+    });
+
+    // Cargar las provincias desde el archivo GeoJSON
+    fetch("provincias.json")
+      .then((response) => response.json())
+      .then((data) => {
+        provinciasLayer = L.geoJSON(data, {
+          style: styleProvincias,
+          onEachFeature: (feature, layer) => {
+            layer.on({
+              click: onProvinciaClick,
+            });
+          },
+        }).addTo(map);
+
+        // Ajustar el zoom para ver todas las provincias al inicio
+        map.fitBounds(provinciasLayer.getBounds());
+      });
+  </script>
+</body>
+</html>
